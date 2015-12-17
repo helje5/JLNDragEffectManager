@@ -18,7 +18,7 @@ Original: It might work on 10.4 (I think), but it should definitely work on
 10.5 and beyond.
 
 HH fork: It might work on 10.10 (I think), but it should definitely work on 
-10.11 and beyond
+10.11 and beyond.
 
 
 ### What are the licensing requirements?
