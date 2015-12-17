@@ -4,6 +4,7 @@
 //
 //  Created by Joshua Nozzi on 10/27/09.
 //  Copyright 2009 Joshua Nozzi. All rights reserved.
+//  Updated for 10.11 and ARC by Helge Hess 12/17/15.
 //
 //	 This software is supplied to you by Joshua Nozzi in consideration 
 //	 of your agreement to the following terms, and your use, installation, 
@@ -49,10 +50,6 @@
 #import <Cocoa/Cocoa.h>
 
 
-@interface DragQueenDemoView : NSView
-{
-	
-}
-
+@interface DragQueenDemoView : NSView < NSDraggingSource >
 
 @end

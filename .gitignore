@@ -1,0 +1,16 @@
+.svn
+.DS_Store
+*.pyc
+*.class
+*.o
+*.shlib
+*.a
+*.xccheckout
+xcdebugger
+UserInterfaceState.xcuserstate
+User Interface State
+WorkspaceSettings.xcsettings
+xcuserdata
+xcshareddata
+obj
+

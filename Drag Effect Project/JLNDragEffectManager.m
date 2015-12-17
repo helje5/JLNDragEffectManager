@@ -4,6 +4,7 @@
 //
 //  Created by Joshua Nozzi on 10/27/09.
 //  Copyright 2009 Joshua Nozzi. All rights reserved.
+//  Updated for 10.11 and ARC by Helge Hess 12/17/15.
 //
 //	 This software is supplied to you by Joshua Nozzi in consideration 
 //	 of your agreement to the following terms, and your use, installation, 
@@ -55,233 +56,223 @@
 
 #pragma mark Factory
 
-+ (id)sharedDragEffectManager
-{
-    static id sharedDragEffectManager = nil;
-    if (sharedDragEffectManager == nil)
-        sharedDragEffectManager = [[self alloc] initWithWindow:nil];
-    return sharedDragEffectManager;
++ (id)sharedDragEffectManager {
+  static id sharedDragEffectManager = nil;
+  if (sharedDragEffectManager == nil)
+    sharedDragEffectManager = [[self alloc] initWithWindow:nil];
+  return sharedDragEffectManager;
 }
 
 
 #pragma mark Constructors / Destructors
 
-- (id)initWithWindow:(NSWindow *)window
-{
-	// Create the window first (ignore any we're sent, create our own)
-	window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 64, 64) 
-										  styleMask:NSBorderlessWindowMask 
-											backing:NSBackingStoreBuffered 
-											  defer:NO] autorelease];
-	[window setReleasedWhenClosed:NO];
-	[window setMovableByWindowBackground:NO];
-	[window setBackgroundColor:[NSColor clearColor]];
-	[window setLevel:(NSFloatingWindowLevel + 3000)];
-	[window setOpaque:NO];
-	[window setHasShadow:NO];
-	[[window contentView] setWantsLayer:YES];
-	
-	// Now back to our regularly-scheduled initialization
-	self = [super initWithWindow:window];
-	if (self)
-	{
-		// Initialize our ivars (yes I know they really 
-		// don't need to be, but I have OCD, so shut up)
-		_slideBack = NO;
-		_sourceRect = NSZeroRect;
-		_offset = NSZeroSize;
-		_startPoint = NSZeroPoint;
-		_insideImageSize = NSZeroSize;
-		_outsideImageSize = NSZeroSize;
-		
-		// Create and configure our NSImageViews (we retain them 
-		// since we'll be swapping them in and out of the window)
-		_imageViewA = [[NSImageView alloc] initWithFrame:[[window contentView] bounds]];
-		[_imageViewA setImageScaling:NSScaleToFit];
-		_imageViewB = [[NSImageView alloc] initWithFrame:[[window contentView] bounds]];
-		[_imageViewB setImageScaling:NSScaleToFit];
-		
-		// Modify the window's fade animation to set self as delegate
-		// (this is done so we can order the window out and clean up)
-		CABasicAnimation * alphaValueAnimation = [CABasicAnimation animation];
-		[alphaValueAnimation setDelegate:self];
-		[window setAnimations:[NSMutableDictionary dictionaryWithObject:alphaValueAnimation forKey:@"alphaValue"]];
-	}
-	return self;
++ (NSWindow *)createOverlayWindow {
+  NSWindow *window;
+  
+  // Create the window first (ignore any we're sent, create our own)
+  window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 64, 64) 
+                             styleMask:          NSBorderlessWindowMask
+                             backing:            NSBackingStoreBuffered
+                             defer:NO];
+  
+  window.releasedWhenClosed        = NO;
+  window.movableByWindowBackground = NO;
+  window.backgroundColor           = [NSColor clearColor];
+  window.level                     = (NSFloatingWindowLevel + 3000);
+  window.opaque                    = NO;
+  window.hasShadow                 = NO;
+  window.contentView.wantsLayer    = YES;
+  return window;
 }
 
-- (void)dealloc
-{
-	// It's meant to be used only as a singleton, 
-	// but you *did* see my OCD comment, didn't you?
-	[_imageViewA release];
-	[_imageViewB release];
-	[super dealloc];
+- (id)initWithWindow:(NSWindow *)window {
+  window = [[self class] createOverlayWindow];
+  
+  // Now back to our regularly-scheduled initialization
+  if ((self = [super initWithWindow:window]) != nil) {
+    // Create and configure our NSImageViews (we retain them 
+    // since we'll be swapping them in and out of the window)
+    NSRect bounds = window.contentView.bounds;
+    _imageViewA = [[NSImageView alloc] initWithFrame:bounds];
+    _imageViewB = [[NSImageView alloc] initWithFrame:bounds];
+    _imageViewA.imageScaling = NSImageScaleAxesIndependently;
+    _imageViewB.imageScaling = NSImageScaleAxesIndependently;
+    
+    // Modify the window's fade animation to set self as delegate
+    // (this is done so we can order the window out and clean up)
+    CABasicAnimation *alphaValueAnimation = [CABasicAnimation animation];
+    alphaValueAnimation.delegate = self;
+    
+    window.animations = @{ @"alphaValue": alphaValueAnimation };
+  }
+  return self;
 }
+
 
 
 #pragma mark Drag Configuration & Update
 
 - (void)startDragShowFromSourceScreenRect:(NSRect)aScreenRect 
-						  startingAtPoint:(NSPoint)aStartPoint 
-								   offset:(NSSize)anOffset 
-							  insideImage:(NSImage *)insideImage 
-							 outsideImage:(NSImage *)outsideImage 
-								slideBack:(BOOL)slideBackFlag
+        startingAtPoint:(NSPoint)  aStartPoint
+        offset:         (NSSize)   anOffset
+        insideImage:    (NSImage *)insideImage
+        outsideImage:   (NSImage *)outsideImage
+        slideBack:      (BOOL)     slideBackFlag
 {
-	// Record the state
-	_sourceRect = aScreenRect;
-	_startPoint = aStartPoint;
-	_offset = anOffset;
-	_slideBack = slideBackFlag;
-	_insideImageSize = [insideImage size];
-	_outsideImageSize = [outsideImage size];
-	
-	// Set the window's size to the larger of the two images
-	NSSize largestDimensions = NSZeroSize;
-	largestDimensions.width = MAX(_insideImageSize.width, _outsideImageSize.width);
-	largestDimensions.height = MAX(_insideImageSize.height, _outsideImageSize.height);
-	NSRect frame = [[self window] frame];
-	frame.size = largestDimensions;
-	[[self window] setFrame:frame display:NO];
-	
-	// Center imageViewA's frame within the content view bounds & set its size
-	NSRect frameA = NSZeroRect;
-	frameA.size = _insideImageSize;
-	frameA.origin = NSMakePoint(NSWidth([[[self window] contentView] bounds]) / 2 - NSWidth(frameA) / 2, NSHeight([[[self window] contentView] bounds]) / 2 - NSHeight(frameA) / 2);
-	[_imageViewA setFrame:NSIntegralRect(frameA)];
-	
-	// Set imageViewB's size
-	NSRect frameB = NSZeroRect;
-	frameB.size = _outsideImageSize;
-	[_imageViewB setFrame:NSIntegralRect(frameB)];
-	
-	// Make sure view b isn't in the window and view b is
-	if ([_imageViewB superview])
-		[_imageViewB removeFromSuperview];
-	if ([_imageViewA superview] != [[self window] contentView])
-		[[[self window] contentView] addSubview:_imageViewA];
-	
-	// Set the image views' images
-	[_imageViewA setImage:insideImage];
-	[_imageViewB setImage:outsideImage];
-	
-	// Position the window's center over the start point 
-	// (no animation, just go straight there)
-	[self _centerWindowOverPoint:_startPoint 
-					  withOffset:_offset 
-						 animate:NO];
-	
-	// Set the window's alpha to zero and order it in 
-	// (start position, ready to fade)
-	[[self window] setAlphaValue:0.0];
-	[[self window] orderFront:self];
-	
-	// Fade in quickly
-	[[NSAnimationContext currentContext] setDuration:0.125];
-	[[[self window] animator] setAlphaValue:1.0];
+  // Record the state
+  _sourceRect       = aScreenRect;
+  _startPoint       = aStartPoint;
+  _offset           = anOffset;
+  _slideBack        = slideBackFlag;
+  _insideImageSize  = [insideImage size];
+  _outsideImageSize = [outsideImage size];
+  
+  // Set the window's size to the larger of the two images
+  NSSize largestDimensions = NSZeroSize;
+  largestDimensions.width  =
+                         MAX(_insideImageSize.width,  _outsideImageSize.width);
+  largestDimensions.height =
+                         MAX(_insideImageSize.height, _outsideImageSize.height);
+  
+  NSRect frame = self.window.frame;
+  frame.size = largestDimensions;
+  [self.window setFrame:frame display:NO];
+  
+  // Center imageViewA's frame within the content view bounds & set its size
+  NSRect frameA = NSZeroRect;
+  frameA.size   = self->_insideImageSize;
+  frameA.origin = NSMakePoint(NSWidth (self.window.contentView.bounds) / 2
+                              - NSWidth(frameA)  / 2,
+                              NSHeight(self.window.contentView.bounds) / 2
+                              - NSHeight(frameA) / 2);
+  self->_imageViewA.frame = NSIntegralRect(frameA);
+  
+  // Set imageViewB's size
+  NSRect frameB = NSZeroRect;
+  frameB.size   = self->_outsideImageSize;
+  self->_imageViewB.frame = NSIntegralRect(frameB);
+  
+  // Make sure view b isn't in the window and view b is
+  if (self->_imageViewB.superview)
+    [_imageViewB removeFromSuperview];
+  if (self->_imageViewA.superview != self.window.contentView)
+    [self.window.contentView addSubview:_imageViewA];
+  
+  // Set the image views' images
+  self->_imageViewA.image = insideImage;
+  self->_imageViewB.image = outsideImage;
+  
+  // Position the window's center over the start point 
+  // (no animation, just go straight there)
+  [self _centerWindowOverPoint:_startPoint withOffset:_offset animate:NO];
+  
+  // Set the window's alpha to zero and order it in 
+  // (start position, ready to fade)
+  self.window.alphaValue = 0.0;
+  [self.window orderFront:self];
+  
+  // Fade in quickly
+  [NSAnimationContext currentContext].duration = 0.125;
+  self.window.animator.alphaValue = 1.0;
 }
 
-- (void)updatePosition
-{
-	// We need the mouse's current location in screen coordinates
-	NSPoint mouseLocation = [NSEvent mouseLocation];
-	
-	// Position the window's center over the current location (no animation, just go straight there)
-	[self _centerWindowOverPoint:mouseLocation 
-					  withOffset:_offset 
-						 animate:NO];
-	
-	// Which is the source and which is the target?
-	NSImageView * target = (NSPointInRect(mouseLocation, _sourceRect)) ? _imageViewA : _imageViewB;
-	NSImageView * source = (target == _imageViewA) ? _imageViewB : _imageViewA;
-	
-	// Figure out the target frame (centered, same size as image)
-	NSRect imageViewTargetFrame = NSZeroRect;
-	imageViewTargetFrame.size = (target == _imageViewA) ? _insideImageSize : _outsideImageSize;
-	imageViewTargetFrame.origin = NSMakePoint(NSWidth([[[self window] contentView] bounds]) / 2 - NSWidth(imageViewTargetFrame) / 2, 
-											  NSHeight([[[self window] contentView] bounds]) / 2 - NSHeight(imageViewTargetFrame) / 2);
-	
-	// If the target view is not already visible, swap it in (and animate)
-	if ([target superview] != [[self window] contentView])
-	{
-		// Set the target view's frame to that of the existing view
-		[target setFrame:[source frame]];
-		
-		// Animate the swap and size change (this gives the effect of
-		// one object morphing into another a la Interface Builder)
-		[NSAnimationContext beginGrouping];
-		[[NSAnimationContext currentContext] setDuration:0.2];
-		[[[[self window] contentView] animator] replaceSubview:source with:target];
-		[[target animator] setFrame:NSIntegralRect(imageViewTargetFrame)];
-		[NSAnimationContext endGrouping];
-	}
+- (void)updatePosition {
+  // We need the mouse's current location in screen coordinates
+  NSPoint mouseLocation = [NSEvent mouseLocation];
+  
+  // Position the window's center over the current location (no animation, just
+  // go straight there)
+  [self _centerWindowOverPoint:mouseLocation withOffset:_offset animate:NO];
+  
+  // Which is the source and which is the target?
+  NSImageView *target = (NSPointInRect(mouseLocation, _sourceRect))
+                        ? self->_imageViewA : self->_imageViewB;
+  NSImageView *source = (target == _imageViewA)
+                        ? self->_imageViewB : self->_imageViewA;
+  
+  // Figure out the target frame (centered, same size as image)
+  NSRect imageViewTargetFrame;
+  
+  imageViewTargetFrame.size   =
+                (target == _imageViewA) ? _insideImageSize : _outsideImageSize;
+  
+  imageViewTargetFrame.origin =
+    NSMakePoint(NSWidth(self.window.contentView.bounds) / 2 - NSWidth(imageViewTargetFrame) / 2,
+                NSHeight(self.window.contentView.bounds) / 2 - NSHeight(imageViewTargetFrame) / 2);
+  
+  // If the target view is not already visible, swap it in (and animate)
+  if (target.superview != self.window.contentView) {
+    // Set the target view's frame to that of the existing view
+    target.frame = source.frame;
+    
+    // Animate the swap and size change (this gives the effect of
+    // one object morphing into another a la Interface Builder)
+    [NSAnimationContext beginGrouping];
+    {
+      [NSAnimationContext currentContext].duration = 0.2;
+      [self.window.contentView.animator replaceSubview:source with:target];
+      [target.animator setFrame:NSIntegralRect(imageViewTargetFrame)];
+    }
+    [NSAnimationContext endGrouping];
+  }
 }
 
-- (void)endDragShowWithResult:(NSDragOperation)dragOperation
-{
-	// If the drag operation is none and slide-back is requested, start slide-back effect
-	if (dragOperation == NSDragOperationNone && _slideBack)
-		[self _centerWindowOverPoint:_startPoint 
-						  withOffset:_offset 
-							 animate:YES];
-	
-	// Always start fade-out effect
-	[[[self window] animator] setAlphaValue:0.0];
+- (void)endDragShowWithResult:(NSDragOperation)dragOperation {
+  // If the drag operation is none and slide-back is requested, start slide-back
+  // effect
+  if (dragOperation == NSDragOperationNone && self->_slideBack)
+    [self _centerWindowOverPoint:_startPoint withOffset:_offset animate:YES];
+  
+  // Always start fade-out effect
+  self.window.animator.alphaValue = 0.0;
 }
 
 
 #pragma mark Internal Window Management
 
-- (void)_centerWindowOverPoint:(NSPoint)point 
-					withOffset:(NSSize)offset 
-					   animate:(BOOL)animate
+- (void)_centerWindowOverPoint:(NSPoint)point withOffset:(NSSize)offset
+        animate:(BOOL)animate
 {
-	// Determine the frame
-	NSRect frame = [[self window] frame];
-	frame.origin = NSMakePoint(point.x - (NSWidth(frame) / 2) + offset.width,
-							   point.y - (NSHeight(frame) / 2) + offset.height);
-	
-	// Animate and fade out if requested, else just set the frame.
-	if (animate)
-	{
-		[[NSAnimationContext currentContext] setDuration:0.15];
-		[[[self window] animator] setFrame:frame display:YES];
-	} else {
-		[[self window] setFrame:frame display:YES];
-	}
+  // Determine the frame
+  NSRect frame = self.window.frame;
+  frame.origin = NSMakePoint(point.x - (NSWidth (frame) / 2) + offset.width,
+                             point.y - (NSHeight(frame) / 2) + offset.height);
+  
+  // Animate and fade out if requested, else just set the frame.
+  if (animate) {
+    [NSAnimationContext currentContext].duration = 0.15;
+    [self.window.animator setFrame:frame display:YES];
+  }
+  else
+    [self.window setFrame:frame display:YES];
 }
 
-- (void)_orderOutAndCleanUp
-{
-	// Order our window out
-	[[self window] orderOut:self];
-	
-	// Clean up the state
-	_slideBack = NO;
-	_sourceRect = NSZeroRect;
-	_offset = NSZeroSize;
-	_startPoint = NSZeroPoint;
-	_insideImageSize = NSZeroSize;
-	_outsideImageSize = NSZeroSize;
-	
-	// Drop the images
-	[_imageViewA setImage:nil];
-	[_imageViewB setImage:nil];
+- (void)_orderOutAndCleanUp {
+  // Order our window out
+  [self.window orderOut:self];
+
+  // Clean up the state
+  self->_slideBack        = NO;
+  self->_sourceRect       = NSZeroRect;
+  self->_offset           = NSZeroSize;
+  self->_startPoint       = NSZeroPoint;
+  self->_insideImageSize  = NSZeroSize;
+  self->_outsideImageSize = NSZeroSize;
+
+  // Drop the images
+  [self->_imageViewA setImage:nil];
+  [self->_imageViewB setImage:nil];
 }
 
 
 #pragma mark Animation Delegation
 
-- (void)animationDidStop:(CAAnimation *)theAnimation 
-				finished:(BOOL)flag
-{
-	// We only care about the window's fade-out animation
-	// We want to clean up if successfully faded out
-	if (flag && [[self window] alphaValue] == 0.0)
-		[self _orderOutAndCleanUp];
+- (void)animationDidStop:(CAAnimation *)theAnimation finished:(BOOL)flag {
+  // We only care about the window's fade-out animation
+  // We want to clean up if successfully faded out
+  if (flag && self.window.alphaValue == 0.0)
+    [self _orderOutAndCleanUp];
 }
-
 
 @end
 

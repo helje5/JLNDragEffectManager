@@ -4,6 +4,7 @@
 //
 //  Created by Joshua Nozzi on 10/27/09.
 //  Copyright 2009 Joshua Nozzi. All rights reserved.
+//  Updated for 10.11 and ARC by Helge Hess 12/17/15.
 //
 //	 This software is supplied to you by Joshua Nozzi in consideration 
 //	 of your agreement to the following terms, and your use, installation, 
@@ -55,81 +56,78 @@
 
 #pragma mark Mouse Interaction
 
-- (void)mouseDragged:(NSEvent *)theEvent
-{
-	/* 
-	 
-		Here, we start the dragging session normally for the most part. 
-		
-		Two caveats:
-		
-		1 - Passing nil for the drag image makes Cocoa angry. You DO NOT want 
-			to anger Cocoa the Drag Queen. She's fierce, girl. Seriously. Cocoa 
-			is also a size queen. An image of NSZeroSize just won't do, honey.
-			
-			To get around these issues, just give her what she wants: "an" image 
-			with dimensions. An empty one with a size of {1, 1} will fool her 
-			since she's always liquered up anyway. She'll never notice.
-	 
-		2 - Cocoa runs on her schedule. If you ask HER to do the slide-back, 
-			she'll take her time before we get to clean up after her. Best
-			not to ask - we'll do it ourselves.
-	 
-	 */
-	
-	[self dragImage:[[[NSImage alloc] initWithSize:NSMakeSize(1, 1)] autorelease] 
-				 at:[NSEvent mouseLocation] 
-			 offset:NSZeroSize 
-			  event:theEvent 
-		 pasteboard:nil 
-			 source:self 
-		  slideBack:NO];
+- (void)mouseDragged:(NSEvent *)theEvent {
+  /*
+    Here, we start the dragging session normally for the most part. 
+    
+    Two caveats:
+    
+    1 - Passing nil for the drag image makes Cocoa angry. You DO NOT want 
+        to anger Cocoa the Drag Queen. She's fierce, girl. Seriously. Cocoa
+        is also a size queen. An image of NSZeroSize just won't do, honey.
+        
+        To get around these issues, just give her what she wants: "an" image 
+        with dimensions. An empty one with a size of {1, 1} will fool her 
+        since she's always liquered up anyway. She'll never notice.
+
+    2 - Cocoa runs on her schedule. If you ask HER to do the slide-back, 
+        she'll take her time before we get to clean up after her. Best
+        not to ask - we'll do it ourselves.
+   */
+  
+  NSImage *i1x1 = [[NSImage alloc] initWithSize:NSMakeSize(1, 1)];
+  // TODO(hh): i1x1 needs to contain something for the pasteboard
+  NSDraggingItem *di = [[NSDraggingItem alloc] initWithPasteboardWriter:i1x1];
+  [self beginDraggingSessionWithItems:@[ di ] event:theEvent source:self];
 }
 
 
 #pragma mark Dragging Source
 
-- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal
+- (NSDragOperation)draggingSession:(NSDraggingSession *)sn
+  sourceOperationMaskForDraggingContext:(NSDraggingContext)ctx
 {
-	return NSDragOperationNone;
+  return NSDragOperationNone;
 }
 
-- (void)draggedImage:(NSImage *)anImage beganAt:(NSPoint)aPoint
+- (void)draggingSession:(NSDraggingSession *)sn willBeginAtPoint:(NSPoint)aPoint
 {
-	// Let's figure out our geometry. For shits-n-giggles, we'll 
-	// make the whole window our source screen rect, and the 
-	// current mouse position (at start of drag) as the slide-back point
-	NSPoint startPointInScreen = [NSEvent mouseLocation];
-	NSRect sourceScreenRect = [[self window] frame];
-	
-	// Let's use some images reminiscent of Interface Builder's
-	// drag-from-Library-palette-to-make-a-real-object effect
-	NSImage * insideImage = [NSImage imageNamed:@"textfieldasicon"];
-	NSImage * outsideImage = [NSImage imageNamed:@"textfieldrealized"];
-	
-	// Don the boas and start the drag show!
-	[[JLNDragEffectManager sharedDragEffectManager] startDragShowFromSourceScreenRect:sourceScreenRect 
-																	  startingAtPoint:startPointInScreen 
-																			   offset:NSZeroSize
-																		  insideImage:insideImage 
-																		 outsideImage:outsideImage 
-																			slideBack:YES];
+  // Let's figure out our geometry. For shits-n-giggles, we'll
+  // make the whole window our source screen rect, and the 
+  // current mouse position (at start of drag) as the slide-back point
+  NSPoint startPointInScreen = [NSEvent mouseLocation];
+  NSRect  sourceScreenRect   = self.window.frame;
+  
+  // Let's use some images reminiscent of Interface Builder's
+  // drag-from-Library-palette-to-make-a-real-object effect
+  NSImage *insideImage  = [NSImage imageNamed:@"textfieldasicon"];
+  NSImage *outsideImage = [NSImage imageNamed:@"textfieldrealized"];
+  
+  // Don the boas and start the drag show!
+  [[JLNDragEffectManager sharedDragEffectManager]
+                         startDragShowFromSourceScreenRect:sourceScreenRect
+                         startingAtPoint:startPointInScreen
+                         offset:NSZeroSize
+                         insideImage:insideImage
+                         outsideImage:outsideImage
+                         slideBack:YES];
 }
 
-- (void)draggedImage:(NSImage *)draggedImage movedTo:(NSPoint)screenPoint
-{
+- (void)draggingSession:(NSDraggingSession *)sn movedToPoint:(NSPoint)aPoint {
 	// Update the position
-	[[JLNDragEffectManager sharedDragEffectManager] updatePosition];
+  [[JLNDragEffectManager sharedDragEffectManager] updatePosition];
 }
 
-- (void)draggedImage:(NSImage *)anImage endedAt:(NSPoint)aPoint operation:(NSDragOperation)operation
+- (void)draggingSession:(NSDraggingSession *)sn endedAtPoint:(NSPoint)aPoint
+        operation:(NSDragOperation)operation
 {
-	// End the drag show, clean up the glitter and sweat-and-masquera puddles and call it a day
-	[[JLNDragEffectManager sharedDragEffectManager] endDragShowWithResult:operation];
-	
-	// Do any other processing you might need, including going home to your cats and wig collection
-	// ...
+  // End the drag show, clean up the glitter and sweat-and-masquera puddles and
+  // call it a day
+  [[JLNDragEffectManager sharedDragEffectManager]
+                         endDragShowWithResult:operation];
+  
+  // Do any other processing you might need, including going home to your cats
+  // and wig collection ...
 }
-
 
 @end

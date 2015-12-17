@@ -4,6 +4,7 @@
 //
 //  Created by Joshua Nozzi on 10/27/09.
 //  Copyright 2009 Joshua Nozzi. All rights reserved.
+//  Updated for 10.11 and ARC by Helge Hess 12/17/15.
 //
 //	 This software is supplied to you by Joshua Nozzi in consideration 
 //	 of your agreement to the following terms, and your use, installation, 
@@ -51,17 +52,17 @@
 
 @interface JLNDragEffectManager : NSWindowController
 {
-	// State
-	BOOL								_slideBack;
-	NSRect								_sourceRect;
-	NSPoint								_startPoint;
-	NSSize								_offset;
-	NSSize								_insideImageSize;
-	NSSize								_outsideImageSize;
-	
-	// UI
-	NSImageView *						_imageViewA;
-	NSImageView *						_imageViewB;
+  // State
+  BOOL    _slideBack;
+  NSRect  _sourceRect;
+  NSPoint _startPoint;
+  NSSize  _offset;
+  NSSize  _insideImageSize;
+  NSSize  _outsideImageSize;
+  
+  // UI
+  NSImageView *_imageViewA;
+  NSImageView *_imageViewB;
 }
 
 
@@ -73,11 +74,11 @@
 #pragma mark Drag Configuration & Update
 
 - (void)startDragShowFromSourceScreenRect:(NSRect)aScreenRect 
-						  startingAtPoint:(NSPoint)aStartPoint 
-								   offset:(NSSize)anOffset 
-							  insideImage:(NSImage *)insideImage 
-							 outsideImage:(NSImage *)outsideImage 
-								slideBack:(BOOL)slideBackFlag;
+        startingAtPoint:(NSPoint  )aStartPoint
+        offset:         (NSSize   )anOffset
+        insideImage:    (NSImage *)insideImage
+        outsideImage:   (NSImage *)outsideImage
+        slideBack:      (BOOL     )slideBackFlag;
 - (void)updatePosition;
 - (void)endDragShowWithResult:(NSDragOperation)dragOperation;
 
@@ -85,8 +86,8 @@
 #pragma mark Internal Window Management
 
 - (void)_centerWindowOverPoint:(NSPoint)point 
-					withOffset:(NSSize)offset 
-					   animate:(BOOL)animate;
+        withOffset:            (NSSize )offset
+        animate:               (BOOL   )animate;
 - (void)_orderOutAndCleanUp;
 
 
